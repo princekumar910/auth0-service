@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Globals:
+  Function:
+    Runtime: nodejs18.x
+    MemorySize: 128
+    Architectures: 
+      - x86_64
+Resources:
+  # API Gateway
+  MyApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors: 
+        AllowMethods: "'OPTIONS,POST,GET'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: AuthFunction # Set AuthFunction as the default authorizer
+        Authorizers:
+          AuthFunction:
+            FunctionArn: !GetAtt AuthFunction.Arn # Reference the ARN of the AuthFunction
+            Identity:
+              Header: Authorization # Use the Authorization header for authentication
+              ValidationExpression: Bearer .*
+  # Authentication Function
+  AuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/auth.handler
+
+  # Public Endpoint Function
+  PublicEndpointFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/public.handler
+      Events:
+        AuthApi:
+          Type: Api
+          Properties:
+            Path: /public
+            Method: POST
+            RestApiId: !Ref MyApi
+            Auth:
+              Authorizer: NONE
+
+  # Private Endpoint Function
+  PrivateEndpointFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: src/handlers/private.handler
+      Events:
+        AuthApi:
+          Type: Api
+          Properties:
+            Path: /private
+            Method: POST
+            RestApiId: !Ref MyApi
+
+  # Gateway Responses for Error Handling
+  GatewayResponseExpiredToken:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+      ResponseType: EXPIRED_TOKEN
+      RestApiId: !Ref MyApi
+      StatusCode: '401'
+
+  GatewayResponseUnauthorized:
+    Type: AWS::ApiGateway::GatewayResponse
+    Properties:
+      ResponseParameters:
+        gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+        gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
+      ResponseType: UNAUTHORIZED
+      RestApiId: !Ref MyApi
+      StatusCode: '401'
+
+# Outputs:
+#   ApiEndpoint:
+#     Description: "API Gateway endpoint URL"
+#     Value: !Sub "https://${MyApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+#   ApiId:
+#     Description: "API Gateway ID"
+#     Value: !Ref MyApi
