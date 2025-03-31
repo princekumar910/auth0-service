@@ -1,4 +1,5 @@
 node_modules
 .serverless
-# secret.pem
+secret.pem
 .webpack
+.aws-sam
